@@ -18,23 +18,55 @@ ESP32 firmware that reads telemetry from a Victron solar charge controller over 
 |---|---|
 | ESP32 DevKitC / NodeMCU-32S | `esp32dev` board in PlatformIO |
 | Victron SmartSolar MPPT (any model with VE.Direct text protocol) | Tested on 100/30 |
-| VE.Direct cable (JST 4-pin to bare wires) | Sold by Victron and many third parties |
-| 12 V → 5 V buck converter | Cabin deployment: powers the ESP32 off the battery |
+| VE.Direct cable | See "Getting a VE.Direct pigtail" below |
+| Power for the ESP32 | See "Powering the ESP32" below |
 
-**Do not** power the ESP32 from the VE.Direct +5V pin. It is rated ~50 mA and the ESP32 will brown-out during Wi-Fi TX bursts.
+### Getting a VE.Direct pigtail
+
+Cheapest approach: **buy a VE.Direct cable that has a JST connector on both ends and cut it in half.** You get two pigtails — enough for two ESP32s — for the price of one cable. (Alternative: buy a VE.Direct-to-bare-wires pigtail, slightly tidier but only one per cable.)
 
 ### Wiring
 
 VE.Direct on the SmartSolar is 3.3 V TTL, 19200 8N1 — no level shifter needed.
 
-| VE.Direct pin | Function | ESP32 |
-|---|---|---|
-| 1 | GND | GND |
-| 2 | TX (out of Victron) | GPIO16 (UART2 RX) |
-| 3 | RX (into Victron) | unused — tape off |
-| 4 | +5V | unused — tape off |
+The official VE.Direct pinout (from Victron's protocol docs):
 
-VE.Direct cable wire **colours are not standardised** across manufacturers. Verify with a multimeter before soldering — with the Victron powered, the TX pin reads ~3 V (flickering), GND reads 0 V, and the +5V pin reads ~5 V steady.
+![VE.Direct connector pinout](pinout.png)
+
+The "Producer" column applies to the Victron (which is producing the data); the "Consumer" column would apply to a downstream device that wanted to *talk back* to the Victron, which we don't.
+
+| Pin | Function on the Victron | Connect to |
+|---|---|---|
+| 1 | GND | ESP32 GND |
+| 2 | VE.Direct-RX (input to Victron) | unused — tape off |
+| 3 | VE.Direct-TX (output from Victron) | ESP32 **GPIO16** (UART2 RX) |
+| 4 | Power+ (5V) | See "Powering the ESP32" below |
+
+**VE.Direct cable wire colours are not standardised — verify every cable with a multimeter.** Two cables used during development of this project had different colours for the same pins:
+
+| Pin | Cable A (bare-wire pigtail) | Cable B (VE.Direct-to-VE.Direct, cut in half) |
+|---|---|---|
+| 1 (GND) | Black | Red |
+| 2 (RX) | Green | one of green/white |
+| 3 (TX) | White | the other of green/white |
+| 4 (+5V) | Red | (the remaining colour) |
+
+Verification rule with the Victron powered and a multimeter on DC volts, black probe on confirmed GND:
+
+- Pin 1 (GND) reads **0 V**
+- Pin 3 (TX) reads **~2.5–3.3 V**, flickering (this is the wire you want on GPIO16)
+- Pin 4 (+5V) reads **~5 V** steady
+- Pin 2 (RX) reads ~0 V or floats
+
+### Powering the ESP32
+
+Two options, pick based on how reliable the install needs to be.
+
+**Option A — 12 V → 5 V buck converter off the battery (recommended for unattended cabin installs).** A cheap module (e.g. an LM2596 or MP1584-based board, ~$2) wired between the battery and the ESP32's 5V/VIN pin. Stable, plenty of current headroom, never browns out under Wi-Fi load.
+
+**Option B — direct from VE.Direct Pin 4 (+5V).** Works in practice on most ESP32 dev boards — they accept 5 V on the VIN/5V pin without damage (no magic smoke), so the *voltage* is fine. The *current* is the marginal bit: Victron rates the VE.Direct +5V output around 50 mA, while an ESP32 can spike to 300–500 mA during Wi-Fi TX bursts. Many setups run happily off this anyway; some hit occasional brown-out resets. For a desk-bench setup or a location with stable Wi-Fi (and where a reboot isn't a problem), tapping the VE.Direct +5V directly is the simplest wiring possible. For a remote cabin you can't easily get to, the buck converter is the safer choice.
+
+If you do go with Option B, consider adding a 470–1000 µF bulk capacitor across the ESP32's 5V and GND pins to absorb Wi-Fi current spikes, and optionally a small Schottky diode in series on the +5V line to keep any back-EMF from feeding into the Victron.
 
 ## Build and flash
 
@@ -117,7 +149,7 @@ Fields are omitted when the source device doesn't report them (e.g. `load_i_a` i
 | `info` arrives but `state` never does | Cable wiring (check the `debug` topic's `bytes_seen` counter — if it's growing, the parser is fine; if stuck at 0, it's the wire) |
 | `bytes_seen` grows but `frames_valid` stays 0 for >30 s | UART RX desync or wiring noise — check `debug`'s `ring_ascii` for recognisable text |
 | `status: offline` permanent | ESP32 lost power or Wi-Fi; if Wi-Fi, captive portal will re-open after 30 s |
-| Boot loop / brown-out resets | Likely powered from VE.Direct's +5V instead of a proper supply — see hardware note above |
+| Boot loop / brown-out resets | Most likely under-current from VE.Direct's +5V supply during Wi-Fi bursts. Add a bulk cap, or move to a buck converter off the battery (see Powering the ESP32) |
 
 ## Limitations
 
