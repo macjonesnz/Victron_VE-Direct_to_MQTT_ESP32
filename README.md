@@ -157,6 +157,10 @@ Fields are omitted when the source device doesn't report them (e.g. `load_i_a` i
 - No OTA firmware updates yet — reflashing means USB.
 - HEX-protocol responses are ignored (we only consume text frames).
 
+## Acknowledgements
+
+Used [RalfJL/VE.Direct2MQTT](https://github.com/RalfJL/VE.Direct2MQTT) as a reference / building block while planning this project — credit to Ralf for working through the VE.Direct parsing and MQTT side ahead of us. This repo is a from-scratch rewrite with different design choices (single-file Arduino, captive portal for config, flat dashboard-friendly JSON, UART self-heal for the ESP32 boot-time FIFO overrun), but Ralf's project was a useful starting point.
+
 ## License
 
 MIT — see `LICENSE` (add one if you fork).
