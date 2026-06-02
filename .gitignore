@@ -1,0 +1,7 @@
+.pio/
+.vscode/
+.DS_Store
+
+# Personal docs — not for the public repo
+CLAUDE.md
+notion-page.md
